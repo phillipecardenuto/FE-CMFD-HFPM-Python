@@ -49,8 +49,10 @@ def run_method(fname):
     os.makedirs(f'result/{fname}',exist_ok=True)
 
     #np.save(f"result/{fname}_map.npy", map)
+    map = map.astype("uint8")
     cv2.imwrite(f"result/{fname}_map.png",map)
     #np.save(f"result/{fname}_final_map.npy", final_map)
+    final_map = final_map.astype("uint8")
     cv2.imwrite(f"result/{fname}_final_map.png", final_map)
     plt.imsave(f'result/{fname}_final_map.png', final_map)
     plt.imsave(f'result/{fname}_matched_image.png', vis_image)
