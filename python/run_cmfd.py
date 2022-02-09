@@ -6,12 +6,22 @@ from glob import glob
 from tqdm.contrib.concurrent import process_map
 from pathlib import Path
 from PIL import Image
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import cv2
 import os
 
-files = glob("/work/jcardenuto/translate-forgery-algs/testset/**/figure.png", recursive=True)
+files = glob("/work/jcardenuto/translate-forgery-algs/testset/**/figure_v?.png", recursive=True)
+files += glob("/work/jcardenuto/translate-forgery-algs/testset/**/figure.png", recursive=True)
 
 def run_method(fname):
+    exist_name = fname.split('testset/')[-1]
+    exist_name = exist_name[:-4]
+    if os.path.isfile(f"result/{exist_name}_map.png")  \
+            and os.path.isfile(f"result/{exist_name}_final_map.png") \
+            and os.path.isfile(f'result/{exist_name}_final_map.png') \
+            and os.path.isfile(f'result/{exist_name}_matched_image.png'):
+        return
 
     #img = cv2.imread(fname)
     #img_rgb = img[...,::-1]
@@ -50,13 +60,13 @@ def run_method(fname):
 
     #np.save(f"result/{fname}_map.npy", map)
     map = map.astype("uint8")
-    cv2.imwrite(f"result/{fname}_map.png",map)
     #np.save(f"result/{fname}_final_map.npy", final_map)
     final_map = final_map.astype("uint8")
+    cv2.imwrite(f"result/{fname}_map.png",map)
     cv2.imwrite(f"result/{fname}_final_map.png", final_map)
     plt.imsave(f'result/{fname}_final_map.png', final_map)
     plt.imsave(f'result/{fname}_matched_image.png', vis_image)
 
 
-process_map(run_method, files, chunksize = 10, max_workers = 20)
+process_map(run_method, files, chunksize = 10, max_workers = 30)
 

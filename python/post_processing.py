@@ -355,7 +355,11 @@ def  post_processing(img_rgb, para):
 
             ###### analyze the tranformation matrix (scale)%%%%%%%%%%%%%%%%
             allowed_err = para.allowed_err;
-            [U,S,V] = np.linalg.svd(H[:2,:2]);
+            try:
+                [U,S,V] = np.linalg.svd(H[:2,:2]);
+            except:
+                return [bool_temp, map, inliers1, inliers2]
+
             if para.check_scale and (S[0]>8 or S[0]<0.2 or S[1]>8 or S[1]<0.2):
                 #%print('estimated H ��scale�� is not accurate, give up\n');
                 continue;
