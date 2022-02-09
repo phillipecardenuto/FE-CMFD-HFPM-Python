@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 import cyvlfeat
+from PIL import Image
 
 def gray_cluster(pixel_vals, step, length ,min_pixels):
     """
@@ -21,12 +22,12 @@ def gray_cluster(pixel_vals, step, length ,min_pixels):
     for i in range(num_cls):
         cur_range = cl[i,:];
         cur_samples = np.where(  np.logical_and( cur_range[0] <= pixel_vals , pixel_vals <= cur_range[1]))[0]
-        
+
         if (len(cur_samples) <min_pixels):
             re_cls.append(i);
             continue;
         clusters.append(cur_samples);
-    
+
     pixel_cls = np.delete(pixel_cls, re_cls, axis=0)
     return clusters, pixel_cls
 
@@ -41,15 +42,20 @@ def feature_matching(imgfile, para):
     """
 
     match_thr = para.match_thr;
-    im_brg = cv2.imread(imgfile)
+    #im_brg = cv2.imread(imgfile)
+    im_rgb = Image.open(imgfile)
     # bgr to rgb
-    im_rgb = im_brg[...,::-1].astype(np.float64)
+    #im_rgb = im_brg[...,::-1].astype(np.float64)
+    im_rgb = np.array(im_rgb).astype(np.float64)
     h, w       = im_rgb.shape[:2];
 
     levels = 3;
     min_octave = 0;
     # Gray image
-    im = cv2.cvtColor(im_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float64);
+    if len(im_rgb.shape) > 2:
+        im = cv2.cvtColor(im_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.float64);
+    else:
+        im = im_rgb
     average_kernel = np.ones((3,3)) / 9
     im_smooth =  cv2.filter2D(im, -1, average_kernel);
     if para.sift_method == 1:
@@ -64,15 +70,15 @@ def feature_matching(imgfile, para):
                                 compute_descriptor = True)
                                 #'Max_keypoints',para.max_keypoints_octave ) ;
         feature_len = locs.shape[0];
-        print('found %d features\n'%feature_len);
+        #print('found %d features\n'%feature_len);
     elif para.sift_method == 2:
         raise NotImplementedError
         # sift = cv2.SIFT_create()
         # locs, descs = sift.detectAndCompute(im.astype(np.uint8), None)
 
     #### the min_sigma for each octave
-   
-    # locs -> [:, [Y,X,S,TH]]  
+
+    # locs -> [:, [Y,X,S,TH]]
     # where ``(Y, X)`` is the floating point center of the
     # keypoint, ``S`` is the scale and ``TH`` is the orientation (in radians).
 
@@ -94,18 +100,18 @@ def feature_matching(imgfile, para):
     for i in range(octaves_num):
         sigma_low = extend_octaves_sigma[octaves_num -i-1];
         sigma_high = extend_octaves_sigma[octaves_num -i];
-        
+
         locs_scales.append(
             np.squeeze(
                 locs[ np.where(np.logical_and(sigma_low<=detected_sigmas, detected_sigmas<sigma_high)),:]
             )
                 );
-        descs_scales.append( 
+        descs_scales.append(
             np.squeeze(
                 descs[ np.where(np.logical_and(sigma_low<=detected_sigmas, detected_sigmas<sigma_high)),:]
             )
         )
-    
+
     ##########do matching%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     p1=np.array([]); p2=np.array([]);
     num = 0;
@@ -114,8 +120,12 @@ def feature_matching(imgfile, para):
         cur_locs = locs_scales[oct_idx];
         cur_des =  descs_scales[oct_idx];
         if len(cur_locs) == 0:
-            print('no keypoints are detected in %dth octave\n'% (oct_idx+1));
+            #print('no keypoints are detected in %dth octave\n'% (oct_idx+1));
             continue;
+        if cur_locs.ndim == 1:
+            cur_locs = np.expand_dims(cur_locs, axis=0)
+        if cur_des.ndim == 1:
+            cur_des = np.expand_dims(cur_des, axis=0)
         temp_locs = np.round(cur_locs[:,:4]).astype(np.int);
         temp_locs[:,2:4] = cur_locs[:,2:4];
 
@@ -156,7 +166,9 @@ def feature_matching(imgfile, para):
                     arc_cos = np.arccos(np.round(dotprods, decimals=7)) # round to avoid 1.0000000000000000000002
                     indx = np.argsort(arc_cos);
                     j=1;
-                    if len(indx)>j and arc_cos[indx[j]] < match_thr* arc_cos[indx[j+1]]:
+                    if len(indx)<= j+1:
+                        continue
+                    if arc_cos[indx[j]] < match_thr* arc_cos[indx[j+1]]:
                         match_i = indx[j];
                         if np.linalg.norm( loc1[i,:]-loc1[match_i,:], 2) > para.min_clone_dis:
                             num=num+1;
@@ -168,7 +180,7 @@ def feature_matching(imgfile, para):
                                 p1 = np.squeeze(loc1_i)
                             else:
                                 p1 = np.vstack([p1, np.squeeze(loc1_i)])
-                                
+
                             loc1_matchi = loc1[match_i,:]
                             if len(loc1_matchi.shape) == 1:
                                 loc1_matchi = np.expand_dims(loc1_matchi, axis=0)
@@ -178,12 +190,15 @@ def feature_matching(imgfile, para):
                                 p2 = np.vstack([p2, np.squeeze(loc1_matchi)])
                             match_indx.append( (i,match_i));
         if len(p1):
+            if p1.ndim == 1:
+                p1 = np.expand_dims(p1, axis=0)
+                p2 = np.expand_dims(p2, axis=0)
             p = np.round( np.hstack( [p1[:,:2], p2[:, :2]]));
             p_temp, indx = np.unique(p, return_index=True, axis=0);
             p1 = np.hstack([p_temp[:,:2], p1[indx,2:]]);
             p2 = np.hstack([p_temp[:,2:], p2[indx,2:]]);
             num=p1.shape[0]
-    print('Found %d matches.\n'%num);
+    #print('Found %d matches.\n'%num);
 
     ###################remove isolated matching%%%%%%%%%%%%%%%%%
     num = 0;
@@ -198,11 +213,11 @@ def feature_matching(imgfile, para):
         num = np.sum(indx, axis=0);
         p1 = np.vstack([ np.transpose(p1[indx,0:2]), np.ones((1, num)) , np.transpose(p1[indx,2:])]);
         p2 = np.vstack([ np.transpose(p2[indx,0:2]), np.ones((1, num)) , np.transpose(p2[indx,2:])]);
-    print('after remove the isoloated matching, found %d matches\n'% num);
+    #print('after remove the isoloated matching, found %d matches\n'% num);
 
     # First line of p1 contains all points x coordinate
     # Second line of p1 contains all points y coordinate
     # Third contains all ones
-    # Fourth contains the scales 
+    # Fourth contains the scales
     # Fifth contains the thresholds
     return p1, p2

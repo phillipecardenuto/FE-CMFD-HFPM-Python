@@ -4,6 +4,8 @@ from scipy.spatial.distance import pdist, squareform
 from skimage import measure
 
 def generated_object_match_map(map, p1, p2):
+    if len(p1) == 0:
+        return map
 
     # Remove all keypoints that both p1 and p2 do not fall in a region
     remove_points = []
@@ -29,22 +31,22 @@ def generated_object_match_map(map, p1, p2):
         # fix x and y position
         point1 = point1[::-1].astype(int)
         point2 = point2[::-1].astype(int)
-        
+
         found1 = False
         found2 = False
         insert1 = False
         insert2 = False
-        
+
         for cc in range(1, num_conn_comp+1):
             cc_map = np.argwhere(label_map == cc)
-            
+
             if point1 in cc_map:
                 if not label_map[tuple(point1)] in connected_components_found:
                     cc_p1.append((point1,label_map[tuple(point1)], p_index+1)) # point coord, connected component coord, point label
                     connected_components_found.append(label_map[tuple(point1)])
                     insert1 = True
                 found1 = True
-                
+
             if point2 in cc_map:
                 if not label_map[tuple(point2)] in connected_components_found:
                     cc_p2.append((point2, label_map[tuple(point2)], p_index+1)) # point coord, connected component coord, point label
@@ -70,17 +72,17 @@ def generated_object_match_map(map, p1, p2):
         if (final_label_map[label_map == region1[1]] >0).any():
             final_label_map[label_map==region2[1]] = final_label_map[label_map == region1[1]][0]
             conquired = True
-            
+
         # If regions already conquired, assign the same label to the region1 (matching of region2)
         if (final_label_map[label_map == region2[1]] >0).any():
             final_label_map[label_map==region1[1]] = final_label_map[label_map == region2[1]][0]
             conquired = True
-        
+
         if not conquired:
             final_label_map[label_map==region1[1]] = index
             final_label_map[label_map==region2[1]] = index
             index += 1
-        
+
     final_label_map[final_label_map<=0] =0
     return final_label_map
 
@@ -88,16 +90,16 @@ def hnormalise(x):
     """
     @ Return nx
     """
-    
+
     rows,npts = x.shape;
     nx = x.copy();
 
     # Find the indices of the points that are not at infinity
     finiteind = np.where(abs(x[rows-1,:]) > np.finfo(float).eps)[0];
 
-    if len(finiteind) != npts:
+    #if len(finiteind) != npts:
         #%warning('Some points are at infinity');
-        print('Some points are at infinity');
+        #print('Some points are at infinity');
 
     # Normalize points not at infinity
     for r in range(rows-1):
@@ -105,7 +107,7 @@ def hnormalise(x):
 
     nx[rows-1,finiteind] = 1;
     return nx
-    
+
 def check_orientation(cos_t, sin_t, o1, o2, t):
     """
     @Return inliers
@@ -136,18 +138,18 @@ def check_orientation(cos_t, sin_t, o1, o2, t):
 
 def noise_estimation(img, p1, p2):
     """
-    @Return noise_err 
+    @Return noise_err
     """
     h,w = img.shape[:2];
 
     s = 16;
     indx = np.logical_and(
-            np.logical_and( 
-             np.logical_and(p1[0,:]>s, p1[1,:]>s), 
+            np.logical_and(
+             np.logical_and(p1[0,:]>s, p1[1,:]>s),
              np.logical_and(p1[1,:]<w-s,p1[1,:]<h-s)
             ),
         np.logical_and(
-            np.logical_and( 
+            np.logical_and(
             p2[0,:]>s, p2[1,:]>s),
             np.logical_and(p2[1,:]<w-s, p2[1,:]<h-s)
         )
@@ -157,14 +159,19 @@ def noise_estimation(img, p1, p2):
     N = p1.shape[1];
     record_ratio = np.ones(N);
     for i in range(N):
-        patch_1 = img[ p1_ne[0,i]-s:p1_ne[0,i]+s, p1_ne[1,i]-s:p1_ne[1,i]+s];
-        patch_2 = img[p2_ne[0,i]-s:p2_ne[0,i]+s, p2_ne[1,i]-s:p2_ne[1,i]+s];
-        [grad_tr_x1, grad_tr_y1] = np.gradient(patch_1.astype(np.float64), edge_order=2);
-        mag_tr1 = np.mean(np.sum(np.sum(np.sqrt(grad_tr_x1**2+grad_tr_y1**2))));
-        [grad_tr_x2, grad_tr_y2] = np.gradient(patch_2.astype(np.float64), edge_order=2);
-        mag_tr2 = np.mean(np.sum(np.sum(np.sqrt(grad_tr_x2**+grad_tr_y2**2))));
-        record_ratio[i] = max(mag_tr1, mag_tr2)/max(1,min(mag_tr1, mag_tr2));
+        try:
+            patch_1 = img[ p1_ne[0,i]-s:p1_ne[0,i]+s, p1_ne[1,i]-s:p1_ne[1,i]+s];
+            patch_2 = img[p2_ne[0,i]-s:p2_ne[0,i]+s, p2_ne[1,i]-s:p2_ne[1,i]+s];
+            [grad_tr_x1, grad_tr_y1] = np.gradient(patch_1.astype(np.float64), edge_order=2);
+            mag_tr1 = np.mean(np.sum(np.sum(np.sqrt(grad_tr_x1**2+grad_tr_y1**2))));
+            [grad_tr_x2, grad_tr_y2] = np.gradient(patch_2.astype(np.float64), edge_order=2);
+            mag_tr2 = np.mean(np.sum(np.sum(np.sqrt(grad_tr_x2**2+grad_tr_y2**2))));
+            record_ratio[i] = max(mag_tr1, mag_tr2)/max(1,min(mag_tr1, mag_tr2));
+        except:
+            continue
 
+    if len(record_ratio) == 0:
+        return 100
     record_ratio = np.sort(record_ratio);
     noise_ratio = np.mean(record_ratio[1:-1]);
     noise_err = 0;
@@ -198,7 +205,8 @@ def check_vh_edges(p1, p2, thr):
     N = p1.shape[1];
     temp1 = np.min([np.var(p1[0,:]), np.var(p1[1,:]), np.var(p2[0,:]), np.var(p2[1,:])]); #an vertical or horizontal edge
     abs_p1p2 = np.abs(p1-p2);
-    temp2 = np.max(np.var(abs_p1p2[0,:]), np.var(abs_p1p2[1,:]));
+    temp2 = np.max([np.var(abs_p1p2[0,:]), np.var(abs_p1p2[1,:])]);
+
     if temp1<thr and temp2<1:
         check_pass = False;
 
@@ -213,9 +221,9 @@ def get_inliers(H, p1, p2, t):
     Python could not successfully apply the inverse
     invHp2 = np.linalg.inv(Hp1) @ p2
     therefore, we are only cheking the H @ p1 towards p2
-    """    
+    """
     invHp2 = np.linalg.lstsq(H ,p2, rcond=1e-10 )[0];
-    
+
     p1h     = hnormalise(p1.copy());
     p2h     = hnormalise(p2.copy());
     Hp1    = hnormalise(Hp1);
@@ -224,12 +232,16 @@ def get_inliers(H, p1, p2, t):
     d2 = np.sum((p2-Hp1)**2, axis=0);
     inliers = abs(d2) < t;
     return inliers
-   
-   
+
+
 
 def  post_processing(img_rgb, para):
-    # Return [bool_temp, map, inliers1, inliers2] 
-    img = cv2.cvtColor(img_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    # Return [bool_temp, map, inliers1, inliers2]
+
+    if len(img_rgb.shape) > 2:
+        img = cv2.cvtColor(img_rgb.astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    else:
+        img = img_rgb
     para.r_ratio = 16;
     r_ratio = para.r_ratio;
     p1 = para.p1.copy(); p2 = para.p2.copy();
@@ -243,12 +255,19 @@ def  post_processing(img_rgb, para):
     inliers2 = [];
     bool_temp=0;
     map = np.zeros((h,w));
+
+    if len(p1) ==0:
+        return bool_temp, map, inliers1, inliers2
+
     if  p1.shape[1] >= 5:
 
         average_kernel = np.ones((3,3)) / 9
-        img_r =  cv2.filter2D(img_rgb[:,:,0].astype(np.float64), -1, average_kernel);
-        img_g =  cv2.filter2D(img_rgb[:,:,1].astype(np.float64), -1, average_kernel);
-        img_b =  cv2.filter2D(img_rgb[:,:,2].astype(np.float64), -1, average_kernel);
+        if len(img_rgb.shape) > 2:
+            img_r =  cv2.filter2D(img_rgb[:,:,0].astype(np.float64), -1, average_kernel);
+            img_g =  cv2.filter2D(img_rgb[:,:,1].astype(np.float64), -1, average_kernel);
+            img_b =  cv2.filter2D(img_rgb[:,:,2].astype(np.float64), -1, average_kernel);
+        else:
+            img_gray = cv2.filter2D(img.astype(np.float64), -1, average_kernel);
 
         map_1 = np.zeros((h,w));
         map_2  = np.zeros((h,w));
@@ -304,10 +323,10 @@ def  post_processing(img_rgb, para):
             # cur_p1 = p1[:, cur_indx1];
             # cur_p2 = p2[:, cur_indx2];
 
-            # cur_indx_changed = np.logical_xor( 
+            # cur_indx_changed = np.logical_xor(
                             #  np.logical_or(cur_indx1, cur_indx2),
                             #   cur_indx1);
-            
+
             # if np.sum(cur_indx_changed)>0:
                 # cur_p1_add = p2[:, cur_indx_changed];
                 # cur_p2_add = p1[:, cur_indx_changed];
@@ -316,7 +335,7 @@ def  post_processing(img_rgb, para):
 
             #######do ransac%%%%%%%%%%%%%%%%%
             if cur_p1.shape[1] < 4:
-                print('find matches less 4 in a local region, continue!\n ');
+                #print('find matches less 4 in a local region, continue!\n ');
                 continue;
 
             t  = 0.05;
@@ -331,7 +350,7 @@ def  post_processing(img_rgb, para):
 
             inliers1 = np.nonzero(mask_inliers1)[0] # get all inliers
             if (not np.array(H).any()) or len(inliers1)<4: #para.min_inliers
-                print('the number of inliers is small, continue!\n ');
+                #print('the number of inliers is small, continue!\n ');
                 continue;
 
             ###### analyze the tranformation matrix (scale)%%%%%%%%%%%%%%%%
@@ -359,7 +378,7 @@ def  post_processing(img_rgb, para):
                                 cur_p2[4,:],
                                 15);
                 if np.sum(indx_o)<len(indx_o)*0.8:
-                    print('check dominant orientation fail, continue!\n ');
+                    #print('check dominant orientation fail, continue!\n ');
                     continue;
 
                 # if sum(indx_o)<length(indx_o) && sum(indx_o)>4
@@ -404,7 +423,7 @@ def  post_processing(img_rgb, para):
                     # fprintf('kick out some outliers through dominant orientation!\n ');
             if (cur_x1.shape[1]< max(min_inliers,np.floor(n_matches*para.match_ratio))) \
                     and cur_x1.shape[1]  < para.min_total_inliers:
-                print('detected random match pairs, give up!\n');
+                #print('detected random match pairs, give up!\n');
                 continue
 
             if cur_x1.shape[1]<17 and para.check_dis and \
@@ -430,7 +449,7 @@ def  post_processing(img_rgb, para):
 
             for i in range(para.bi_direction):     #bi-direction transform
 
-                
+
 
                 H_cur=H.copy();
                 if i == 1:
@@ -467,14 +486,20 @@ def  post_processing(img_rgb, para):
                                     np.logical_and(0<=sus_region_2[0], sus_region_2[0]<h),
                                     np.logical_and( 0<=sus_region_2[1], sus_region_2[1]<w) )].astype(np.uint)
 
-                dif_r = abs(img_r[tuple(sus_region_1)] - img_r[tuple(sus_region_2)]);
-                dif_g = abs(img_g[tuple(sus_region_1)] - img_g[tuple(sus_region_2)]);
-                dif_b = abs(img_b[tuple(sus_region_1)] - img_b[tuple(sus_region_2)]);
+                if len(img_rgb.shape) > 2:
+                    dif_r = abs(img_r[tuple(sus_region_1)] - img_r[tuple(sus_region_2)]);
+                    dif_g = abs(img_g[tuple(sus_region_1)] - img_g[tuple(sus_region_2)]);
+                    dif_b = abs(img_b[tuple(sus_region_1)] - img_b[tuple(sus_region_2)]);
 
-                refind_indx = np.logical_and(np.logical_and(dif_r< max_error, dif_g<max_error)
-                                        ,dif_b<max_error);
+                    refind_indx = np.logical_and(np.logical_and(dif_r< max_error, dif_g<max_error)
+                                             ,dif_b<max_error);
+
+                else:
+                    dif = abs(img_gray[tuple(sus_region_1)] - img_gray[tuple(sus_region_2)]);
+                    refind_indx = dif <max_error
 
                 map_ori[tuple(sus_region_1[:, np.logical_not(refind_indx)])] = 0;
+
 
                 map_copymove = np.zeros((h,w));
                 map_copymove[tuple(sus_region_2[:, refind_indx])]=1;
@@ -501,10 +526,10 @@ def  post_processing(img_rgb, para):
         if np.sum(map_1)>0 and np.sum(map_2)>0 and (S[0] >=4 or S[1]>=4):
             map =  bwareaopen(map, min_size);
 
-    if(bool_temp):
-        print('Tampering detected!\n\n');
-    else:
-        print('Image not tampered.\n\n');
+    #if(bool_temp):
+        #print('Tampering detected!\n\n');
+    #else:
+        #print('Image not tampered.\n\n');
     return [bool_temp, map, inliers1, inliers2]
 
 def fill_small_holes(map, N):
@@ -599,34 +624,34 @@ def get_kernel_disk (imclose_para):
     elif imclose_para == 15:
 
         return np.array([
-   [0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  0,   0,   0,   0],   
-   [0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   0,   0,   0],   
-   [0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   0,   0],   
-   [0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   0],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],   
-   [0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   0],   
-   [0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   0,   0],   
-   [0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   0,   0,   0],   
-   [0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,  0,   0,   0,   0],   
-   [0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,   0,  0,   0,   0,   0] 
+   [0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  0,   0,   0,   0],
+   [0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   0,   0,   0],
+   [0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   0,   0],
+   [0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   0],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   1],
+   [0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   1,   0],
+   [0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   1,   0,   0],
+   [0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  1,   0,   0,   0],
+   [0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,  0,   0,   0,   0],
+   [0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   1,   0,   0,   0,   0,  0,   0,   0,   0]
   ]
 ,dtype=np.uint8)

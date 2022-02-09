@@ -34,22 +34,27 @@ def run_method(fname):
 
 
     vis_image = img_rgb.copy()
-    for p_index in range(p1.shape[1]):
-        point1 = (int(p1[0,p_index]), int(p1[1,p_index]))
-        point2 = (int(p2[0,p_index]), int(p2[1,p_index]))
+    if len(p1):
+        for p_index in range(p1.shape[1]):
+            point1 = (int(p1[0,p_index]), int(p1[1,p_index]))
+            point2 = (int(p2[0,p_index]), int(p2[1,p_index]))
 
-        vis_image = cv2.line(img=vis_image , pt1=point1 , pt2=point2, color=(0,255,0), thickness=2)
+            vis_image = cv2.line(img=vis_image , pt1=point1 , pt2=point2, color=(0,255,0), thickness=2)
+    else:
+        vis_image = img_rgb
 
 
     fname = fname.split('testset/')[-1]
     fname = fname[:-4]
     os.makedirs(f'result/{fname}',exist_ok=True)
 
-    np.save(f"result/{fname}_map.npy", map)
-    np.save(f"result/{fname}_final_map.npy", final_map)
+    #np.save(f"result/{fname}_map.npy", map)
+    cv2.imwrite(f"result/{fname}_map.png",map)
+    #np.save(f"result/{fname}_final_map.npy", final_map)
+    cv2.imwrite(f"result/{fname}_final_map.png", final_map)
     plt.imsave(f'result/{fname}_final_map.png', final_map)
     plt.imsave(f'result/{fname}_matched_image.png', vis_image)
 
 
-process_map(run_method, files[:100], chunksize = 10, max_workers = 20)
+process_map(run_method, files, chunksize = 10, max_workers = 20)
 
