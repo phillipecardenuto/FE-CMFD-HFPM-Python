@@ -29,6 +29,7 @@ class Parameters(object):
 		self.max_scale = 2 #for coverage database
 		self.fillholes =0 #for coverage database
 		self.allow_error_inliers=1.5 #for coverage database
+		self.half_dis_add = 50;
 
 		if w < 840 and h<840:
 			self.check_orienation=1;
