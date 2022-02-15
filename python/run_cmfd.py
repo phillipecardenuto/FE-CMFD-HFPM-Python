@@ -1,3 +1,4 @@
+from pathlib import Path
 from process_image import Parameters
 from feature_matching  import *
 from post_processing import *
@@ -56,14 +57,15 @@ def run_method(fname):
 
     fname = fname.split('testset/')[-1]
     fname = fname[:-4]
-    os.makedirs(f'result/{fname}',exist_ok=True)
+    dir_name = fname.split(Path(fname).name)[0]
+    os.makedirs(f'result/{dir_name}',exist_ok=True)
 
     #np.save(f"result/{fname}_map.npy", map)
     map = map.astype("uint8")
     #np.save(f"result/{fname}_final_map.npy", final_map)
     final_map = final_map.astype("uint8")
     cv2.imwrite(f"result/{fname}_map.png",map)
-    cv2.imwrite(f"result/{fname}_final_map.png", final_map)
+    cv2.imwrite(f"result/{fname}_final_map_ids.png", final_map)
     plt.imsave(f'result/{fname}_final_map.png', final_map)
     plt.imsave(f'result/{fname}_matched_image.png', vis_image)
 
